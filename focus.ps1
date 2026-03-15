@@ -26,6 +26,13 @@ public class Win32Helper {
     [DllImport("user32.dll")]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
 
+    [DllImport("user32.dll")]
+    public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, int dwExtraInfo);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
     public static IntPtr FindWindowByTitle(string titlePart) {
         IntPtr found = IntPtr.Zero;
         EnumDelegate filter = delegate(IntPtr hWnd, int lParam) {
@@ -47,6 +54,28 @@ public class Win32Helper {
         EnumWindows(filter, IntPtr.Zero);
         return found;
     }
+
+    public static void ForceForeground(IntPtr hWnd, bool maximize) {
+        // 1. 윈도우 포커스 권한 우회 트릭: 임의의 ALT 키 이벤트를 발생시켜 OS가 입력 스트림을 깨우도록 합니다.
+        keybd_event(0x12, 0, 0, 0); // ALT key down
+        keybd_event(0x12, 0, 2, 0); // ALT key up
+
+        // 2. 창을 앞으로 보냅니다.
+        SetForegroundWindow(hWnd);
+
+        // 3. 상태(최대화 또는 복구) 요청 처리
+        if (maximize) {
+            ShowWindow(hWnd, 3); // SW_SHOWMAXIMIZED
+        } else {
+            ShowWindow(hWnd, 9); // SW_RESTORE
+        }
+
+        // 4. 강제로 '가장 위(TOPMOST)'로 끌어왔다가 롤백(NOTOPMOST)하여 게임 등 다른 전체화면 앱 뒤에 숨는 것을 완벽 방지
+        SetWindowPos(hWnd, new IntPtr(-1), 0, 0, 0, 0, 0x0001 | 0x0002); // HWND_TOPMOST (NoSize=0x0001, NoMove=0x0002)
+        SetWindowPos(hWnd, new IntPtr(-2), 0, 0, 0, 0, 0x0001 | 0x0002); // HWND_NOTOPMOST
+        
+        SetForegroundWindow(hWnd);
+    }
 }
 "@
 
@@ -58,16 +87,11 @@ if ($TargetTitlePart -ne "") {
 }
 
 if ($hwnd -eq [IntPtr]::Zero) {
-    # 혹시 못 찾았을 경우 가장 첫 번째 Antigravity 창으로 포커스
+    # 찾지 못했다면 기존대로 아무거나 하나 열기
     $p = Get-Process -Name 'Antigravity' -ErrorAction SilentlyContinue | Where-Object {$_.MainWindowHandle -ne 0} | Select-Object -First 1
     if ($p) { $hwnd = $p.MainWindowHandle }
 }
 
 if ($hwnd -ne [IntPtr]::Zero) {
-    if ($Maximize) {
-        [Win32Helper]::ShowWindow($hwnd, 3) # SW_MAXIMIZE (최대화/전체화면)
-    } else {
-        [Win32Helper]::ShowWindow($hwnd, 9) # SW_RESTORE (원래 창 크기)
-    }
-    [Win32Helper]::SetForegroundWindow($hwnd)
+    [Win32Helper]::ForceForeground($hwnd, $Maximize)
 }

@@ -1,13 +1,18 @@
-const http = require('http');
 const path = require('path');
+const http = require('http');
 
-const msg = process.argv[2] || "Antigravity 작업이 완료되었습니다! 화면을 확인하세요.";
-// [핵심 변경점] 터미널에서 AI가 인자로 넘길 해당 프로젝트 이름(창 제목의 앞부분)을 받습니다.
-// 예: node alert.js "작업끝" "popup"
-const targetWorkspace = process.argv[3] || ""; 
+let msg = process.argv[2];
+if (!msg || msg === '--max') {
+    msg = "Antigravity 작업이 완료되었습니다! 화면을 확인하세요.";
+}
+
+let targetWorkspace = process.argv[3];
+if (!targetWorkspace || targetWorkspace === '--max') {
+    // 사용자가 폴더명을 명시하지 않으면 자동으로 현재 경로의 폴더명을 추적!
+    targetWorkspace = path.basename(process.cwd());
+}
+
 const threadId = "Antigravity-Done"; 
-
-// [핵심 변경점] 터미널 명령어 마지막에 --max 플래그를 줬는지 체크합니다.
 const isMaximize = process.argv.includes('--max');
 
 const data = JSON.stringify({

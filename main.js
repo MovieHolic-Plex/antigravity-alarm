@@ -1,46 +1,52 @@
-const { app, BrowserWindow, Tray, Menu, Notification, nativeImage } = require('electron');
+const { app, BrowserWindow, Notification, ipcMain } = require('electron');
 const path = require('path');
 const express = require('express');
-
- 
+const child_process = require('child_process');
 
 let mainWindow;
-let tray;
 const expressApp = express();
 expressApp.use(express.json());
 
 const PORT = 35000;
+let notifications = [];
+
+function updateBadge() {
+  if (process.platform === 'win32') {
+    app.setBadgeCount(notifications.length); // 윈도우11+ 작업표시줄 숫자 배지 지원
+  }
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 600,
-    height: 400,
-    show: false, // 프로그램 시작 시 창을 띄우지 않고 백그라운드(트레이)에 숨겨둡니다.
-    title: "Antigravity 클라이언트",
+    width: 450,
+    height: 650,
+    title: "Antigravity Dashboard",
+    icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
     }
   });
 
+  mainWindow.setMenuBarVisibility(false);
   mainWindow.loadFile('index.html');
 
-  // 최소화 또는 닫기 버튼 클릭 시 진짜로 끄지 않고 트레이로 숨기기
+  // X (닫기) 버튼을 눌렀을 때, 진짜로 끄지 않고 "작업표시줄(Taskbar)"로 단순 최소화!
+  // 즉, 트레이 숨기기가 아니라 보통 프로그램처럼 화면 아래에 상주합니다.
   mainWindow.on('close', (event) => {
     if (!app.isQuiting) {
       event.preventDefault();
-      mainWindow.hide();
+      mainWindow.minimize(); 
     }
-    return false;
   });
 }
 
-// 프로그램 중복 실행 방지
+// 중복 실행 방지
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
 } else {
-  // 이미 실행 중인데 또 켰을 경우 기존 창을 맨 앞으로 띄움
+  // 이미 켜져있는데 또 켜려고 하면 창을 띄워줌
   app.on('second-instance', () => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
@@ -51,65 +57,87 @@ if (!gotTheLock) {
 
   app.whenReady().then(() => {
     createWindow();
-    
-    // 트레이 아이콘 세팅 (1x1 임시 투명 픽셀 생성)
-    const icon = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=');
-    tray = new Tray(icon);
-    
-    // 우클릭 메뉴
-    const contextMenu = Menu.buildFromTemplate([
-      { label: '클라이언트 열기', click: () => mainWindow.show() },
-      { label: '완전 종료', click: () => {
-          app.isQuiting = true;
-          app.quit();
-        } 
-      }
-    ]);
-    tray.setToolTip('Antigravity 대기 상태');
-    tray.setContextMenu(contextMenu);
-    
-    // 트레이 아이콘 더블클릭 시 메인 윈도우 표시
-    tray.on('double-click', () => {
-      mainWindow.show();
-    });
+    updateBadge(); // 초기화
 
-    // ----------------------------------------------------
-    // [백그라운드 API 서버 설정] 다른 앱에서 POST로 쏴줍니다.
+    // 백그라운드 API 서버
     expressApp.post('/api/notify', (req, res) => {
       const { threadId, message, targetWorkspace, maximize } = req.body;
+      
+      const newNoti = {
+        id: Date.now().toString(),
+        threadId: threadId || 'N/A',
+        workspace: targetWorkspace || path.basename(process.cwd()),
+        message: message || '작업 완료',
+        time: new Date().toLocaleTimeString(),
+        maximize: maximize
+      };
 
-      if (!Notification.isSupported()) {
-        return res.status(500).json({ error: '알림을 지원하지 않는 환경입니다.' });
+      notifications.unshift(newNoti); // 최신이 맨 위로
+      updateBadge();
+
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-list', notifications);
+        
+        // 🔴 [핵심 피드백 반영] 알람이 오면 작업표시줄 아이콘을 주황색으로 번쩍이게(Flash) 합니다!
+        if (mainWindow.isMinimized() || !mainWindow.isFocused()) {
+           mainWindow.flashFrame(true); 
+        }
       }
 
-      // 우측 하단 윈도우 토스트 알림 띄우기
-      const notification = new Notification({
-        title: '새로운 메시지 도착!',
-        body: message || `쓰레드 아이디 [${threadId}]에서 호출이 왔습니다.`
-      });
-
-      // 🔴 [핵심 로직] 사용자가 알림을 '클릭'했을 때의 이벤트
-      notification.on('click', () => {
-        // 1. Antigravity 에디터 중, 자신을 호출한 작업 공간(폴더명)이 들어간 진짜 창을 뽑아옵니다!
-        const workspaceArg = targetWorkspace ? ` -TargetTitlePart "${targetWorkspace}"` : "";
-        const maxArg = maximize ? " -Maximize" : ""; // 🚀 최대화 옵션 플래그 추가!
-        require('child_process').exec('powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + path.join(__dirname, 'focus.ps1') + '"' + workspaceArg + maxArg, (err) => {
-          if (err) console.error("Antigravity 포커스 스크립트 실행 실패:", err);
+      // 우측 하단 윈도우 토스트도 계속 띄워줍니다.
+      if (Notification.isSupported()) {
+        const toast = new Notification({
+          title: `[${newNoti.workspace}] 작업 완료!`,
+          body: newNoti.message
         });
+        toast.on('click', () => {
+          if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.show();
+            mainWindow.focus();
+            mainWindow.flashFrame(false); // 번쩍임 끄기
+          }
+        });
+        toast.show();
+      }
 
-        // 2. 혹시 몰라 트레이용 미니 창에도 쓰레드 정보를 넘겨둡니다 (옵션)
-        mainWindow.webContents.send('open-thread', threadId);
-      });
-
-      notification.show();
-      res.json({ success: true, message: '알림이 정상적으로 윈도우에 표시되었습니다.' });
+      res.json({ success: true, total: notifications.length });
     });
 
-    // 서버 시작 (백그라운드 포트 35000)
-    expressApp.listen(PORT, '127.0.0.1', () => {
-      console.log(`[서버 준비 완료] http://127.0.0.1:${PORT} 에서 대기 중입니다.`);
-      // 처음 실행 시 잘 켜졌다고 알림 출력
-      new Notification({ title: 'Antigravity Alarm', body: '프로그램이 시작되어 트레이에 상주합니다.' }).show();
+    expressApp.listen(PORT, '127.0.0.1');
+
+    // 렌더러(목록)에서 유저가 특정 알림을 클릭했을 때!
+    ipcMain.on('click-notification', (event, id) => {
+      const noti = notifications.find(n => n.id === id);
+      if (noti) {
+        triggerFocus(noti);
+      }
+    });
+
+    // 모두 지우기
+    ipcMain.on('clear-all', () => {
+      notifications = [];
+      updateBadge();
+      mainWindow.webContents.send('update-list', notifications);
+      mainWindow.flashFrame(false);
     });
   });
+}
+
+function triggerFocus(noti) {
+  // 사용자가 폴더(Workspace) 명이 포함된 창만 열고, 무조건 전체 화면(-Maximize)으로 열게 요청
+  const workspaceArg = noti.workspace ? ` -TargetTitlePart "${noti.workspace}"` : "";
+  const maxArg = " -Maximize"; 
+  const psScript = path.join(__dirname, 'focus.ps1');
+
+  // Powershell 에 스크립트 실행
+  child_process.exec(`powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File "${psScript}"${workspaceArg}${maxArg}`, (err) => {
+    if (err) console.error("포커스 실행 에러(무시 가능):", err);
+  });
+
+  // 해당 알림은 클릭했으므로 삭제
+  notifications = notifications.filter(n => n.id !== noti.id);
+  updateBadge();
+  mainWindow.webContents.send('update-list', notifications);
+  mainWindow.flashFrame(false);
 }

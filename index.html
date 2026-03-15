@@ -2,52 +2,99 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>Antigravity Main App</title>
+  <title>Antigravity Dashboard</title>
   <style>
-    body { 
-      font-family: 'Malgun Gothic', sans-serif; 
-      padding: 0; margin: 0; background-color: #f7f9fc; 
-      display: flex; justify-content: center; align-items: center; height: 100vh;
+    :root {
+      --bg: #1e1e2e;
+      --text: #cdd6f4;
+      --subtext: #a6adc8;
+      --accent: #cba6f7;
+      --item-bg: #313244;
+      --item-hover: #45475a;
     }
-    .container {
-      background: white; border-radius: 12px; padding: 30px; 
-      box-shadow: 0 4px 15px rgba(0,0,0,0.05); width: 80%; max-width: 500px;
-      text-align: center;
+    body {
+      margin: 0; padding: 0;
+      font-family: 'Malgun Gothic', 'Segoe UI', sans-serif;
+      background-color: var(--bg); color: var(--text);
+      display: flex; flex-direction: column; height: 100vh;
+      overflow: hidden;
     }
-    h2 { color: #1a1a1a; margin-top: 0; font-size: 20px;}
-    .thread-box {
-      margin-top: 30px; padding: 20px; background-color: #eef2ff;
-      border: 1px dashed #6366f1; border-radius: 8px;
+    .header {
+      padding: 20px; background-color: #11111b;
+      display: flex; justify-content: space-between; align-items: center;
+      border-bottom: 1px solid #313244;
     }
-    .thread-id {
-      color: #4f46e5; font-weight: 800; font-size: 28px; display: block; margin-top: 10px;
+    .header h2 { margin: 0; font-size: 18px; font-weight: 600; color: var(--accent); }
+    .clear-btn { 
+      background: #f38ba8; color: #11111b; border: none; padding: 6px 12px;
+      border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold;
+      transition: background 0.2s;
     }
+    .clear-btn:hover { background: #ffb4c6; }
+    
+    .list {
+      flex: 1; padding: 15px; overflow-y: auto;
+    }
+    .empty {
+      text-align: center; color: var(--subtext); margin-top: 80px; font-size: 15px;
+    }
+    
+    .noti-item {
+      background: var(--item-bg); border-radius: 8px; padding: 15px;
+      margin-bottom: 12px; cursor: pointer; transition: 0.2s;
+      border-left: 4px solid var(--accent);
+    }
+    .noti-item:hover { background: var(--item-hover); transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0,0,0,0.3); } /* 마우스 올렸을 때 클릭 유도 */
+    .noti-title {
+      font-weight: bold; color: #89b4fa; font-size: 15px; margin-bottom: 8px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .noti-time { font-size: 12px; color: var(--subtext); font-weight: normal; }
+    .noti-msg { font-size: 14px; line-height: 1.5; color: var(--text); }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h2>대기 중인 상태입니다 ☕</h2>
-    <p style="color: #666; font-size: 14px;">오른쪽 아래 알림(Toast)을 클릭하면 여기에 해당 쓰레드가 열립니다.</p>
-    
-    <div id="thread-container" class="thread-box" style="display: none;">
-      <span style="color:#6366f1;">활성화된 쓰레드 ID</span>
-      <span id="thread-id-display" class="thread-id"></span>
-    </div>
+  <div class="header">
+    <h2>🚀 Antigravity Alarms</h2>
+    <button class="clear-btn" id="clearBtn">모두 지우기</button>
+  </div>
+  <div class="list" id="list">
+    <div class="empty">대기 중인 알람이 없습니다.<br><br>AI 작업이 끝나면 여기에 쌓입니다!</div>
   </div>
 
   <script>
     const { ipcRenderer } = require('electron');
 
-    // 메인 프로세스(main.js)에서 'open-thread' 신호를 받으면 실행됨
-    ipcRenderer.on('open-thread', (event, threadId) => {
-      document.querySelector('h2').innerText = '진행 중인 채팅방/쓰레드';
-      document.querySelector('h2').style.color = '#4f46e5';
-      
-      const threadContainer = document.getElementById('thread-container');
-      const threadIdDisplay = document.getElementById('thread-id-display');
-      
-      threadIdDisplay.innerText = threadId;
-      threadContainer.style.display = 'block';
+    const listEl = document.getElementById('list');
+    
+    document.getElementById('clearBtn').addEventListener('click', () => {
+      ipcRenderer.send('clear-all');
+    });
+
+    ipcRenderer.on('update-list', (event, notifications) => {
+      if (notifications.length === 0) {
+        listEl.innerHTML = '<div class="empty">대기 중인 알람이 없습니다.<br><br>AI 작업이 끝나면 여기에 쌓입니다!</div>';
+        return;
+      }
+
+      listEl.innerHTML = '';
+      notifications.forEach(noti => {
+        const item = document.createElement('div');
+        item.className = 'noti-item';
+        item.innerHTML = `
+          <div class="noti-title">
+            <span>[📁 ${noti.workspace}]</span>
+            <span class="noti-time">${noti.time}</span>
+          </div>
+          <div class="noti-msg">${noti.message}</div>
+          <div style="margin-top: 8px; font-size: 11px; color: #a6adc8;">👆 클릭하면 전체화면으로 포커스 됩니다.</div>
+        `;
+        // 클릭하면 해당 IDE로 창 열기 이벤트 송출
+        item.addEventListener('click', () => {
+          ipcRenderer.send('click-notification', noti.id);
+        });
+        listEl.appendChild(item);
+      });
     });
   </script>
 </body>
