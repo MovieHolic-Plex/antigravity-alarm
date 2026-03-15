@@ -7,10 +7,14 @@ const msg = process.argv[2] || "Antigravity 작업이 완료되었습니다! 화
 const targetWorkspace = process.argv[3] || ""; 
 const threadId = "Antigravity-Done"; 
 
+// [핵심 변경점] 터미널 명령어 마지막에 --max 플래그를 줬는지 체크합니다.
+const isMaximize = process.argv.includes('--max');
+
 const data = JSON.stringify({
   threadId: threadId,
   message: msg,
-  targetWorkspace: targetWorkspace
+  targetWorkspace: targetWorkspace,
+  maximize: isMaximize
 });
 
 const options = {

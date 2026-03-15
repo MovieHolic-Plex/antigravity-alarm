@@ -1,4 +1,7 @@
-param([string]$TargetTitlePart = "")
+param(
+    [string]$TargetTitlePart = "",
+    [switch]$Maximize
+)
 
 $code = @"
 using System;
@@ -61,6 +64,10 @@ if ($hwnd -eq [IntPtr]::Zero) {
 }
 
 if ($hwnd -ne [IntPtr]::Zero) {
-    [Win32Helper]::ShowWindow($hwnd, 9)
+    if ($Maximize) {
+        [Win32Helper]::ShowWindow($hwnd, 3) # SW_MAXIMIZE (최대화/전체화면)
+    } else {
+        [Win32Helper]::ShowWindow($hwnd, 9) # SW_RESTORE (원래 창 크기)
+    }
     [Win32Helper]::SetForegroundWindow($hwnd)
 }

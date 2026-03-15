@@ -76,7 +76,7 @@ if (!gotTheLock) {
     // ----------------------------------------------------
     // [백그라운드 API 서버 설정] 다른 앱에서 POST로 쏴줍니다.
     expressApp.post('/api/notify', (req, res) => {
-      const { threadId, message, targetWorkspace } = req.body;
+      const { threadId, message, targetWorkspace, maximize } = req.body;
 
       if (!Notification.isSupported()) {
         return res.status(500).json({ error: '알림을 지원하지 않는 환경입니다.' });
@@ -92,7 +92,8 @@ if (!gotTheLock) {
       notification.on('click', () => {
         // 1. Antigravity 에디터 중, 자신을 호출한 작업 공간(폴더명)이 들어간 진짜 창을 뽑아옵니다!
         const workspaceArg = targetWorkspace ? ` -TargetTitlePart "${targetWorkspace}"` : "";
-        require('child_process').exec('powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + path.join(__dirname, 'focus.ps1') + '"' + workspaceArg, (err) => {
+        const maxArg = maximize ? " -Maximize" : ""; // 🚀 최대화 옵션 플래그 추가!
+        require('child_process').exec('powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + path.join(__dirname, 'focus.ps1') + '"' + workspaceArg + maxArg, (err) => {
           if (err) console.error("Antigravity 포커스 스크립트 실행 실패:", err);
         });
 
