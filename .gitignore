@@ -4,3 +4,4 @@ node_modules/
 .DS_Store
 github_upload.ps1
 create_startup.ps1
+dist/
