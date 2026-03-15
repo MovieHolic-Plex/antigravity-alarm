@@ -1,15 +1,49 @@
 {
   "name": "antigravity-alarm",
   "version": "1.0.0",
-  "description": "Electron System Tray & Notification Test",
+  "description": "Windows Workspace Focus Notifier for AI Editors",
   "main": "main.js",
   "scripts": {
-    "start": "set ELECTRON_RUN_AS_NODE= && electron ."
+    "start": "set ELECTRON_RUN_AS_NODE= && electron .",
+    "build": "electron-builder --win"
+  },
+  "build": {
+    "appId": "com.antigravity.alarm",
+    "productName": "Antigravity Alarm",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "index.html",
+      "alert.js",
+      "focus.ps1",
+      "icon.png",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "icon": "icon.png",
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "signAndEditExecutable": false,
+      "sign": null
+    },
+    "portable": {
+      "artifactName": "AntigravityAlarm-${version}-Portable.${ext}"
+    }
   },
   "dependencies": {
     "express": "^4.22.1"
   },
   "devDependencies": {
-    "electron": "^41.0.2"
+    "electron": "^41.0.2",
+    "electron-builder": "^25.1.8"
   }
 }
