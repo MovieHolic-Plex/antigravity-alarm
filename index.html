@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>Antigravity Main App</title>
+  <style>
+    body { 
+      font-family: 'Malgun Gothic', sans-serif; 
+      padding: 0; margin: 0; background-color: #f7f9fc; 
+      display: flex; justify-content: center; align-items: center; height: 100vh;
+    }
+    .container {
+      background: white; border-radius: 12px; padding: 30px; 
+      box-shadow: 0 4px 15px rgba(0,0,0,0.05); width: 80%; max-width: 500px;
+      text-align: center;
+    }
+    h2 { color: #1a1a1a; margin-top: 0; font-size: 20px;}
+    .thread-box {
+      margin-top: 30px; padding: 20px; background-color: #eef2ff;
+      border: 1px dashed #6366f1; border-radius: 8px;
+    }
+    .thread-id {
+      color: #4f46e5; font-weight: 800; font-size: 28px; display: block; margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>대기 중인 상태입니다 ☕</h2>
+    <p style="color: #666; font-size: 14px;">오른쪽 아래 알림(Toast)을 클릭하면 여기에 해당 쓰레드가 열립니다.</p>
+    
+    <div id="thread-container" class="thread-box" style="display: none;">
+      <span style="color:#6366f1;">활성화된 쓰레드 ID</span>
+      <span id="thread-id-display" class="thread-id"></span>
+    </div>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+
+    // 메인 프로세스(main.js)에서 'open-thread' 신호를 받으면 실행됨
+    ipcRenderer.on('open-thread', (event, threadId) => {
+      document.querySelector('h2').innerText = '진행 중인 채팅방/쓰레드';
+      document.querySelector('h2').style.color = '#4f46e5';
+      
+      const threadContainer = document.getElementById('thread-container');
+      const threadIdDisplay = document.getElementById('thread-id-display');
+      
+      threadIdDisplay.innerText = threadId;
+      threadContainer.style.display = 'block';
+    });
+  </script>
+</body>
+</html>
